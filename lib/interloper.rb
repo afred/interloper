@@ -28,47 +28,52 @@ module Interloper
     def generate_interloper_module
       Module.new do
         class << self
-          def before_callbacks
-            @before_callbacks ||= {}
+          # @return [Array] The list of available hooks.
+          def hooks
+            [:before, :after]
           end
 
-          def after_callbacks
-            @after_callbacks ||= {}
-          end
-
-          def before_callbacks_for(method_name)
-            before_callbacks[method_name] || []
-          end
-
-          def after_callbacks_for(method_name)
-            after_callbacks[method_name] || []
-          end
-
-          def run_all_before_callbacks_for(method_name, object_context, *orig_args, &orig_block)
-            before_callbacks_for(method_name).each do |callback|
-              # object_context.instance_eval(callback.call(*orig_args,&orig_block))
-              object_context.instance_eval &callback
+          # @return [Hash] The default hash for tracking callbacks to methods.
+          def default_callbacks
+            {}.tap do |callbacks|
+              hooks.each do |hook|
+                callbacks[hook] = {}
+              end
             end
           end
 
-          def run_all_after_callbacks_for(method_name, object_context, *orig_args, &orig_block)
-            after_callbacks_for(method_name).each do |callback|
-              object_context.instance_eval(callback.call(*orig_args,&orig_block))
+          # @param [Symbol] hook Optional name of a hook. See .hook method in
+          #   this module.
+          # @param [Symbol] method_name Optional name of a method.
+          # @return [Hash, Array] A hash or array of callbacks. If the 'hook'
+          #   param is provided, it will return a hash of callbacks keyed by
+          #   method name. If both 'hook' and 'method_name' are provided, will
+          #   return an array of callbacks for the given hook and method.
+          def callbacks(hook=nil, method_name=nil)
+            @callbacks ||= default_callbacks
+            if hook && method_name
+              # Returns callback stack for a given method and hook. If there
+              # aren't callbacks in the stack, return something enumberable to
+              # be loop-friendly.
+              @callbacks.fetch(hook).fetch(method_name, [])
+            elsif hook
+              # Return all callbacks for a given hook, e.g. :before.
+              @callbacks.fetch(hook)
+            else
+              @callbacks
             end
           end
 
+          def run_callbacks(hook, method_name, object_context, *orig_args, &orig_block)
+            callbacks(hook, method_name).each do |callback|
+              object_context.instance_exec *orig_args, &callback
+            end
+          end
 
-          def add_before_callbacks(*method_names, &callback)
+          def add_callbacks(hook, *method_names, &callback)
             method_names.each do |method_name|
-              before_callbacks[method_name] ||= []
-              before_callbacks[method_name] << callback
-            end
-          end
-
-          def add_after_callbacks(*method_names, &callback)
-            method_names.each do |method_name|
-              after_callbacks[method_name] ||= []
-              after_callbacks[method_name] << callback
+              callbacks[hook][method_name] ||= []
+              callbacks[hook][method_name] << callback
             end
           end
 
@@ -76,9 +81,9 @@ module Interloper
             method_names.each do |method_name|
               define_method(method_name) do |*args, &block|
                 called_method = __method__
-                interloper_module.run_all_before_callbacks_for(called_method, self, *args, &block)
+                interloper_module.run_callbacks(:before, called_method, self, *args, &block)
                 return_val = super(*args,&block)
-                interloper_module.run_all_after_callbacks_for(called_method, self, *args, &block)
+                interloper_module.run_callbacks(:after, called_method, self, *args, &block)
                 return_val
               end
             end
@@ -89,12 +94,12 @@ module Interloper
 
     def before(*method_names, &callback)
       interloper_module.define_interloper_methods(*method_names)
-      interloper_module.add_before_callbacks(*method_names, &callback)
+      interloper_module.add_callbacks(:before, *method_names, &callback)
     end
 
     def after(*method_names, &callback)
       interloper_module.define_interloper_methods(*method_names)
-      interloper_module.add_after_callbacks(*method_names, &callback)
+      interloper_module.add_callbacks(:after, *method_names, &callback)
     end
   end
 end

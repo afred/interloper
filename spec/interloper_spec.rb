@@ -12,48 +12,65 @@ RSpec.describe Interloper do
     end
   end
 
+  # Default helpers
   let(:test_class) { test_class_factory }
+  let(:test_instance) { test_class.new }
 
   it "has a version number" do
     expect(Interloper::VERSION).not_to be nil
   end
 
-  context 'when extended by a class' do
+  describe 'provides .before and .after class methods' do
     subject { test_class }
+    it { is_expected.to respond_to(:before) }
+    it { is_expected.to respond_to(:after) }
+  end
 
-    context 'provides a class interface:' do
-      it { is_expected.to respond_to(:before) }
-      it { is_expected.to respond_to(:after) }
+
+  context 'when before and after callbacks are set' do
+    let(:test_class) do
+      test_class_factory do
+        before(:do_something) { do_something_before }
+        before(:do_something) { then_do_something_else_before }
+        after(:do_something) { do_something_after }
+        after(:do_something) { then_do_something_else_after }
+
+        def do_something_before; end
+        def then_do_something_else_before; end
+        def do_something
+          observable_action
+        end
+        def observable_action; end
+        def do_something_after; end
+        def then_do_something_else_after; end
+      end
     end
 
-    context 'when a before hook is configured for a method' do
+    it 'runs callbacks in the proper order' do
+      expect(test_instance).to receive(:do_something_before).exactly(1).times.ordered
+      expect(test_instance).to receive(:then_do_something_else_before).exactly(1).times.ordered
+      expect(test_instance).to receive(:observable_action).exactly(1).times.ordered
+      expect(test_instance).to receive(:do_something_after).exactly(1).times.ordered
+      expect(test_instance).to receive(:then_do_something_else_after).exactly(1).times.ordered
+      test_instance.do_something
+    end
+  end
 
-      let(:test_class) do
-        test_class_factory do
-          # Add callback to run before :do_something
-          before(:do_something) { before_do_something }
-
-          # Define the callback here so we can test to see if it's called.
-          def before_do_something; end
-
-          # Define the method we're adding callbacks for.
-          def do_something
-            # Call a method tha we can test to see if/when it's been called.
-            observable_action
-          end
-
-          # Define a method that we can test to see it it's called.
-          def observable_action; end
+  describe 'callbacks that receive arguments' do
+    let(:test_class) do
+      test_class_factory do
+        # Change the param within the callback and then test the result.
+        before(:do_something) do |test_hash|
+          test_hash[:value] += 1
         end
+        def do_something(x); end
       end
+    end
 
-      let(:test_instance) { test_class.new }
+    let(:test_hash) { { value: 0 } }
 
-      it 'calls the hook before the method is called' do
-        expect(test_instance).to receive(:before_do_something).exactly(1).times.ordered
-        expect(test_instance).to receive(:observable_action).exactly(1).times.ordered
-        test_instance.do_something
-      end
+    it 'receive the same arguments as the method it is interloping' do
+      expect { test_instance.do_something(test_hash) }.to change { test_hash[:value] }.from(0).to(1)
     end
   end
 end
