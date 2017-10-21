@@ -69,7 +69,7 @@ RSpec.describe Interloper do
 
     let(:test_hash) { { value: 0 } }
 
-    it 'receive the same arguments as the method it is interloping' do
+    it 'receives the same arguments as the method it is interloping' do
       expect { test_instance.do_something(test_hash) }.to change { test_hash[:value] }.from(0).to(1)
     end
   end

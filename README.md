@@ -1,8 +1,6 @@
 # Interloper
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/interloper`. To experiment with that code, run `bin/console` for an interactive prompt.
-
-TODO: Delete this and the text above, and describe your gem
+Interloper adds _before_ and _after_ callback hooks to methods on POROs (plain old Ruby objects).
 
 ## Installation
 
@@ -22,7 +20,59 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+To add `before` and `after` callbacks to a method:
+```ruby
+require 'interloper'
+
+class Foo
+  include Interloper
+
+  before(:do_something) { puts "do something before" }
+  before(:do_something) { puts "do something else before" }
+  after(:do_something) { puts "do something after" }
+  after(:do_something) { puts "do something else after" }
+
+  def do_something
+    puts "doing it"
+  end
+end
+
+Foo.new.do_something
+```
+**Output:**
+```
+do something before
+do something else before
+doing it
+do something after
+do something else after
+=> nil
+```
+
+
+Callbacks will receive the same arguments as the method being called.
+```ruby
+require 'interloper'
+class Foo
+  include Interloper
+
+  before(:do_something) do |x|
+    puts "do something before, with #{x}"
+  end
+
+  def do_something(something)
+    puts "doing it with #{something}"
+  end
+end
+
+Foo.new.do_something("grace and style")
+```
+Output:
+```
+do something before, with grace and style
+doing it with grace and style
+ => nil 
+```
 
 ## Development
 
