@@ -10,7 +10,8 @@ Gem::Specification.new do |spec|
   spec.email         = ["afredmyers@gmail.com"]
 
   spec.summary       = %q{Add before and after hooks to PORO methods.}
-  spec.description   = %q{Interloper will prepend a module to your class that redefines the methods you specify, executing a stack of before and after hooks around the original logic.}
+  spec.description   = %q{Interloper adds before and after hooks to methods on plain old ruby objects.}
+  spec.homepage      = "https://github.com/afred/interloper"
 
   spec.files         = `git ls-files -z`.split("\x0").reject do |f|
     f.match(%r{^(test|spec|features)/})
