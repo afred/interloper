@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/afred/interloper.svg?branch=master)](https://travis-ci.org/afred/interloper)
+
 # Interloper
 
 Interloper adds _before_ and _after_ callback hooks to methods on POROs (plain old Ruby objects).
