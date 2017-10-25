@@ -3,7 +3,7 @@ require "interloper/version"
 module Interloper
 
   def interloper_module
-    self.class.interloper_module
+    @interloper_module ||= self.class.interloper_module
   end
 
   def Interloper.included(base)
@@ -12,17 +12,25 @@ module Interloper
 
   module ClassMethods
 
-    # Generates an Interloper module that is namespeced under the including
+    def interloper_const_name
+      if self.name
+        "#{self.name}Interloper"
+      else
+        "AnonymousInterloper#{self.object_id}"
+      end.to_sym
+    end
+
+    # Generates an Interloper module that is namespaced under the including
     # class, if one does not already exist. Then prepends the Interloper
     # module to the including class.
     # @return Module the Interloper module that was prepended to the including
     #   class.
     def interloper_module
-      # Create the Interloper module if it doesn't exist already
-      const_set(:Interloper, generate_interloper_module) unless self.constants.include? :Interloper
-      # Prepend the interloper module
-      prepend const_get(:Interloper)
-      const_get(:Interloper)
+      unless self.constants.include? interloper_const_name
+        const_set(interloper_const_name, generate_interloper_module)
+        prepend const_get(interloper_const_name)
+      end
+      const_get(interloper_const_name)
     end
 
     def generate_interloper_module
@@ -77,14 +85,18 @@ module Interloper
             end
           end
 
-          def define_interloper_methods(*method_names)
+          def define_interloper_methods(*method_names, interloper_module_name)
             method_names.each do |method_name|
-              define_method(method_name) do |*args, &block|
-                called_method = __method__
-                interloper_module.run_callbacks(:before, called_method, self, *args, &block)
-                return_val = super(*args,&block)
-                interloper_module.run_callbacks(:after, called_method, self, *args, &block)
-                return_val
+              unless instance_methods.include? method_name
+                module_eval do
+                  eval <<-CODE
+                    def #{method_name}(*args, &block)
+                      self.class.const_get(:#{interloper_module_name}).run_callbacks(:before, :#{method_name}, self, *args, &block)
+                      super(*args, &block)
+                      self.class.const_get(:#{interloper_module_name}).run_callbacks(:after, :#{method_name}, self, *args, &block)
+                    end
+                  CODE
+                end
               end
             end
           end
@@ -93,12 +105,12 @@ module Interloper
     end
 
     def before(*method_names, &callback)
-      interloper_module.define_interloper_methods(*method_names)
+      interloper_module.define_interloper_methods(*method_names, interloper_const_name)
       interloper_module.add_callbacks(:before, *method_names, &callback)
     end
 
     def after(*method_names, &callback)
-      interloper_module.define_interloper_methods(*method_names)
+      interloper_module.define_interloper_methods(*method_names, interloper_const_name)
       interloper_module.add_callbacks(:after, *method_names, &callback)
     end
   end
