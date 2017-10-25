@@ -4,11 +4,29 @@ RSpec.describe Interloper do
 
   # Factory method for creating test classes that include Interloper by
   # default, and can be configured further with a block.
-  def test_class_factory(&block)
-    Class.new do
-      include Interloper
+  def test_class_factory(parent_class: nil, &block)
+    if parent_class
+      Class.new(parent_class)
+    else
+      Class.new
     end.tap do |klass|
+      klass.include Interloper
       klass.class_eval(&block) if block_given?
+    end
+  end
+
+  describe 'test_class_factory' do
+    let(:test_parent_class) do
+      test_class_factory do
+        def parent_method; end
+      end
+    end
+
+    let(:test_child) { test_class_factory(parent_class: test_parent_class).new }
+
+    it 'allows inheritance'  do
+      expect(test_child).to be_a test_parent_class
+      expect(test_child).to respond_to :parent_method
     end
   end
 
@@ -71,6 +89,60 @@ RSpec.describe Interloper do
 
     it 'receives the same arguments as the method it is interloping' do
       expect { test_instance.do_something(test_hash) }.to change { test_hash[:value] }.from(0).to(1)
+    end
+  end
+
+  describe 'subclasses and superclasses defining callbacks on the same method' do
+    # Define an anonymous class on which we can make observable method calls
+    # in our tests
+    let(:observable) do
+      Class.new do
+        def observe(x); end
+      end.new
+    end
+
+    # Define a parent class with before and after callbacks hooked onto a
+    # method, which then makes additional method calls we can observe in tests.
+    let(:test_parent_class) do
+      test_class_factory do
+        before(:do_something) do |observable|
+          observable.observe("parent before doing something")
+        end
+
+        after(:do_something) do |observable|
+          observable.observe("parent after doing something")
+        end
+
+        def do_something(observable)
+          observable.observe("doing something")
+        end
+      end
+    end
+
+    # Define a child class with additional before and after callbacks.
+    let(:test_child_class) do
+      test_class_factory(parent_class: test_parent_class) do
+        before(:do_something) do |observable|
+          observable.observe("child before doing something")
+        end
+
+        after(:do_something) do |observable|
+          observable.observe("child after doing something")
+        end
+      end
+    end
+
+    let(:test_parent) { test_parent_class.new }
+    let(:test_child) { test_child_class.new }
+
+    it 'subclasses have the "innermost" callbacks' do
+      expect(observable).to receive(:observe).with("child before doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("parent before doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("child after doing something").exactly(1).times.ordered
+
+      test_child.do_something(observable)
     end
   end
 end
