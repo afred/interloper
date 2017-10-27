@@ -14,7 +14,7 @@ module Interloper
 
     def interloper_const_name
       if self.name
-        "#{self.name}Interloper"
+        "Interloper"
       else
         "AnonymousInterloper#{self.object_id}"
       end.to_sym
