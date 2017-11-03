@@ -58,7 +58,9 @@ RSpec.describe Interloper do
         def do_something
           observable_action
         end
-        def observable_action; end
+        def observable_action
+          "foo"
+        end
         def do_something_after; end
         def then_do_something_else_after; end
       end
@@ -71,6 +73,10 @@ RSpec.describe Interloper do
       expect(test_instance).to receive(:do_something_after).exactly(1).times.ordered
       expect(test_instance).to receive(:then_do_something_else_after).exactly(1).times.ordered
       test_instance.do_something
+    end
+
+    it 'does not affect the return value of the method' do
+      expect(test_instance.do_something).to eq 'foo'
     end
   end
 

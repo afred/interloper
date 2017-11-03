@@ -92,8 +92,9 @@ module Interloper
                   eval <<-CODE
                     def #{method_name}(*args, &block)
                       self.class.const_get(:#{interloper_module_name}).run_callbacks(:before, :#{method_name}, self, *args, &block)
-                      super(*args, &block)
+                      return_val = super(*args, &block)
                       self.class.const_get(:#{interloper_module_name}).run_callbacks(:after, :#{method_name}, self, *args, &block)
+                      return_val
                     end
                   CODE
                 end
