@@ -114,5 +114,35 @@ module Interloper
       interloper_module.define_interloper_methods(*method_names, interloper_const_name)
       interloper_module.add_callbacks(:after, *method_names, &callback)
     end
+
+    def inherit_callbacks_for(*method_names)
+      inherit_callbacks_before(*method_names)
+      inherit_callbacks_after(*method_names)
+    end
+
+    def inherit_callbacks_before(*method_names)
+      inherited_callbacks(:before, *method_names).each do |callback|
+        before(*method_names, &callback)
+      end
+    end
+
+    def inherit_callbacks_after(*method_names)
+      inherited_callbacks(:after, *method_names).each do |callback|
+        after(*method_names, &callback)
+      end
+    end
+
+    def inherited_callbacks(hook, *method_names)
+      method_names.map do |method_name|
+        ancestor_interloper_module.callbacks[hook][method_name]
+      end.flatten
+    end
+
+    # @return [Module] The nearest ancstors tha is an interloper module.
+    def ancestor_interloper_module
+      ancestors.detect do |ancestor|
+         ancestor.respond_to?(:interloper_module) && (ancestor != self)
+      end.interloper_module
+    end
   end
 end

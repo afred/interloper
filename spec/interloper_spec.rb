@@ -34,6 +34,13 @@ RSpec.describe Interloper do
   let(:test_class) { test_class_factory }
   let(:test_instance) { test_class.new }
 
+  # Define an test double that we can call methods on and set expectations.
+  let(:observable) do
+    Class.new do
+      def observe(x); puts x; end
+    end.new
+  end
+
   it "has a version number" do
     expect(Interloper::VERSION).not_to be nil
   end
@@ -99,20 +106,12 @@ RSpec.describe Interloper do
   end
 
   describe 'subclasses and superclasses defining callbacks on the same method' do
-    # Define an anonymous class on which we can make observable method calls
-    # in our tests
-    let(:observable) do
-      Class.new do
-        def observe(x); end
-      end.new
-    end
-
     # Define a parent class with before and after callbacks hooked onto a
     # method, which then makes additional method calls we can observe in tests.
     let(:test_parent_class) do
       test_class_factory do
         before(:do_something) do |observable|
-          observable.observe("parent before doing something")
+          observable.observe("parent before do something")
         end
 
         after(:do_something) do |observable|
@@ -129,7 +128,7 @@ RSpec.describe Interloper do
     let(:test_child_class) do
       test_class_factory(parent_class: test_parent_class) do
         before(:do_something) do |observable|
-          observable.observe("child before doing something")
+          observable.observe("child before do something")
         end
 
         after(:do_something) do |observable|
@@ -142,13 +141,87 @@ RSpec.describe Interloper do
     let(:test_child) { test_child_class.new }
 
     it 'subclasses have the "innermost" callbacks' do
-      expect(observable).to receive(:observe).with("child before doing something").exactly(1).times.ordered
-      expect(observable).to receive(:observe).with("parent before doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("child before do something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("parent before do something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("doing something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("child after doing something").exactly(1).times.ordered
 
       test_child.do_something(observable)
+    end
+  end
+
+  describe '.inherit_callbacks_for' do
+    let(:test_class) { test_class_factory }
+    it 'calls .inherit_callbacks_before and .inherity_callbacks_after' do
+      method_names = [:foo, :bar]
+      expect(test_class).to receive(:inherit_callbacks_before).with(method_names).exactly(1).times
+      expect(test_class).to receive(:inherit_callbacks_after).with(method_names).exactly(1).times
+      test_class.inherit_callbacks_for(method_names)
+    end
+  end
+
+  describe '.inherit_callbacks_before and .inherit_callbacks_after' do
+    # Define a parent class with before and after callbacks hooked onto a
+    # method, which then makes additional method calls we can observe in tests.
+    let(:test_parent_class) do
+      test_class_factory do
+        before(:do_something) do |observable|
+          observable.observe("parent before do something")
+        end
+
+        after(:do_something) do |observable|
+          observable.observe("parent after doing something")
+        end
+
+        # No op; override in child class
+        def do_something(observable)
+          observable.observe("parent doing something")
+        end
+      end
+    end
+
+    let(:test_parent) { test_parent_class.new }
+    let(:test_child) { test_child_class.new }
+
+    # Define a child class that overrides the parent method, but inherits it's callbacks
+    let(:test_child_class) do
+      test_class_factory(parent_class: test_parent_class) do
+        inherit_callbacks_before(:do_something)
+        inherit_callbacks_after(:do_something)
+        def do_something(observable)
+          observable.observe("child doing something")
+        end
+      end
+    end
+
+    it 'allows a child class to inherit callback defined in a parent class' do
+      expect(observable).to receive(:observe).with("parent before do something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("child doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
+      test_child.do_something(observable)
+    end
+
+    context 'where an overridden method calls super' do
+      before do
+        # Redefine test_child_class#do_something to call super.
+        test_child_class.class_eval do |klass|
+          def do_something(observable)
+            observable.observe("child doing something")
+            super
+          end
+        end
+      end
+
+      it "will call inherited callbacks around the child's method, and the parent's callbacks around the call to super" do
+        expect(observable).to receive(:observe).with("parent before do something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("child doing something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("parent before do something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("parent doing something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
+        test_child.do_something(observable)
+      end
     end
   end
 end
