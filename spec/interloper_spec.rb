@@ -37,7 +37,7 @@ RSpec.describe Interloper do
   # Define an test double that we can call methods on and set expectations.
   let(:observable) do
     Class.new do
-      def observe(x); puts x; end
+      def observe(x); end
     end.new
   end
 
@@ -55,35 +55,29 @@ RSpec.describe Interloper do
   context 'when before and after callbacks are set' do
     let(:test_class) do
       test_class_factory do
-        before(:do_something) { do_something_before }
-        before(:do_something) { then_do_something_else_before }
-        after(:do_something) { do_something_after }
-        after(:do_something) { then_do_something_else_after }
+        before(:do_something) { |observable| observable.observe("before do something") }
+        before(:do_something) { |observable| observable.observe("before do something else") }
+        after(:do_something) { |observable| observable.observe("after do something") }
+        after(:do_something) { |observable| observable.observe("after do something else") }
 
-        def do_something_before; end
-        def then_do_something_else_before; end
-        def do_something
-          observable_action
+        def do_something(observable)
+          observable.observe("doing something")
+          'foo'
         end
-        def observable_action
-          "foo"
-        end
-        def do_something_after; end
-        def then_do_something_else_after; end
       end
     end
 
     it 'runs callbacks in the proper order' do
-      expect(test_instance).to receive(:do_something_before).exactly(1).times.ordered
-      expect(test_instance).to receive(:then_do_something_else_before).exactly(1).times.ordered
-      expect(test_instance).to receive(:observable_action).exactly(1).times.ordered
-      expect(test_instance).to receive(:do_something_after).exactly(1).times.ordered
-      expect(test_instance).to receive(:then_do_something_else_after).exactly(1).times.ordered
-      test_instance.do_something
+      expect(observable).to receive(:observe).with("before do something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("before do something else").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("doing something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("after do something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("after do something else").exactly(1).times.ordered
+      test_instance.do_something(observable)
     end
 
     it 'does not affect the return value of the method' do
-      expect(test_instance.do_something).to eq 'foo'
+      expect(test_instance.do_something(observable)).to eq 'foo'
     end
   end
 
@@ -140,13 +134,12 @@ RSpec.describe Interloper do
     let(:test_parent) { test_parent_class.new }
     let(:test_child) { test_child_class.new }
 
-    it 'subclasses have the "innermost" callbacks' do
+    it 'subclasses have the "outermost" callbacks' do
       expect(observable).to receive(:observe).with("child before do something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("parent before do something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("doing something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
       expect(observable).to receive(:observe).with("child after doing something").exactly(1).times.ordered
-
       test_child.do_something(observable)
     end
   end
@@ -221,6 +214,34 @@ RSpec.describe Interloper do
         expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
         expect(observable).to receive(:observe).with("parent after doing something").exactly(1).times.ordered
         test_child.do_something(observable)
+      end
+    end
+
+    context 'using named classes (instead of anonymous), subclasses overriding parent callbacks and not calling super' do
+
+      before do
+        class Parent
+          include Interloper
+          before(:do_something) { |observable| observable.observe("parent before do something") }
+          def do_something(observable)
+            observable.observe("parent doing something")
+          end
+        end
+
+        class Child < Parent
+          before(:do_something) { |observable| observable.observe("child before do something") }
+          def do_something(observable)
+            observable.observe("child doing something")
+          end
+        end
+      end
+
+      it "will only call the child's callbacks" do
+        expect(observable).to receive(:observe).with("child before do something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("child doing something").exactly(1).times.ordered
+        expect(observable).to_not receive(:observe).with("before parent do something")
+        expect(observable).to_not receive(:observe).with("parent doing something")
+        Child.new.do_something(observable)
       end
     end
   end

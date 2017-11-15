@@ -26,11 +26,29 @@ module Interloper
     # @return Module the Interloper module that was prepended to the including
     #   class.
     def interloper_module
-      unless self.constants.include? interloper_const_name
+      unless prepended? interloper_const_name
         const_set(interloper_const_name, generate_interloper_module)
         prepend const_get(interloper_const_name)
       end
       const_get(interloper_const_name)
+    end
+
+    # @return Boolean True if the interloper module has already been prepnded;]
+    #   false otherwise.
+    def prepended?(const_name)
+      if self.name
+        # If we are not anonymous, then check for the interloper constant name
+        # in the list of prepended modules.
+        prepended_modules.include? const_name
+      else
+        # If we are an anonymous class, check for the anonymous interloper
+        # module name in the list of constants defined for this class.
+        self.constants.include? interloper_const_name
+      end
+    end
+
+    def prepended_modules
+      ancestors.slice(0, ancestors.find_index(self))
     end
 
     def generate_interloper_module
