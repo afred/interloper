@@ -26,11 +26,11 @@ module Interloper
     # @return Module the Interloper module that was prepended to the including
     #   class.
     def interloper_module
-      unless prepended? interloper_const_name
+      @interloper_module ||= begin
         const_set(interloper_const_name, generate_interloper_module)
         prepend const_get(interloper_const_name)
+        const_get(interloper_const_name)
       end
-      const_get(interloper_const_name)
     end
 
     # @return Boolean True if the interloper module has already been prepnded;]
@@ -139,21 +139,21 @@ module Interloper
     end
 
     def inherit_callbacks_before(*method_names)
-      inherited_callbacks(:before, *method_names).each do |callback|
+      ancestor_callbacks(:before, *method_names).each do |callback|
         before(*method_names, &callback)
       end
     end
 
     def inherit_callbacks_after(*method_names)
-      inherited_callbacks(:after, *method_names).each do |callback|
+      ancestor_callbacks(:after, *method_names).each do |callback|
         after(*method_names, &callback)
       end
     end
 
-    def inherited_callbacks(hook, *method_names)
+    def ancestor_callbacks(hook, *method_names)
       method_names.map do |method_name|
         ancestor_interloper_module.callbacks[hook][method_name]
-      end.flatten
+      end.flatten.compact
     end
 
     # @return [Module] The nearest ancstors tha is an interloper module.

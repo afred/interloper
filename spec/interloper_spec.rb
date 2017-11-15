@@ -152,6 +152,33 @@ RSpec.describe Interloper do
       expect(test_class).to receive(:inherit_callbacks_after).with(method_names).exactly(1).times
       test_class.inherit_callbacks_for(method_names)
     end
+
+    context 'when only :before callback is defined in parent' do
+      let(:test_parent_class) do
+        test_class_factory do
+          before(:do_something) { |observable| observable.observe("parent before do something") }
+          before(:do_something) { |observable| observable.observe("parent before do something else") }
+        end
+      end
+
+      let(:test_child_class) do
+        test_class_factory(parent_class: test_parent_class) do
+          inherit_callbacks_for(:do_something)
+          def do_something(observable)
+            observable.observe("child do something")
+          end
+        end
+      end
+
+      let(:test_child) { test_child_class.new }
+
+      it 'only inherits the :before callback, and does not error' do
+        expect(observable).to receive(:observe).with("parent before do something").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("parent before do something else").exactly(1).times.ordered
+        expect(observable).to receive(:observe).with("child do something").exactly(1).times.ordered
+        test_child.do_something(observable)
+      end
+    end
   end
 
   describe '.inherit_callbacks_before and .inherit_callbacks_after' do
@@ -216,10 +243,12 @@ RSpec.describe Interloper do
         test_child.do_something(observable)
       end
     end
+  end
 
-    context 'using named classes (instead of anonymous), subclasses overriding parent callbacks and not calling super' do
+  context 'using named classes (instead of anonymous), subclasses overriding parent callbacks and not calling super' do
 
-      before do
+    before do
+      module Foo
         class Parent
           include Interloper
           before(:do_something) { |observable| observable.observe("parent before do something") }
@@ -230,19 +259,21 @@ RSpec.describe Interloper do
 
         class Child < Parent
           before(:do_something) { |observable| observable.observe("child before do something") }
+          before(:do_something) { |observable| observable.observe("child before do something else") }
+
           def do_something(observable)
             observable.observe("child doing something")
           end
         end
       end
+    end
 
-      it "will only call the child's callbacks" do
-        expect(observable).to receive(:observe).with("child before do something").exactly(1).times.ordered
-        expect(observable).to receive(:observe).with("child doing something").exactly(1).times.ordered
-        expect(observable).to_not receive(:observe).with("before parent do something")
-        expect(observable).to_not receive(:observe).with("parent doing something")
-        Child.new.do_something(observable)
-      end
+    it "will only call the child's callbacks" do
+      expect(observable).to receive(:observe).with("child before do something").exactly(1).times.ordered
+      expect(observable).to receive(:observe).with("child doing something").exactly(1).times.ordered
+      expect(observable).to_not receive(:observe).with("before parent do something")
+      expect(observable).to_not receive(:observe).with("parent doing something")
+      Foo::Child.new.do_something(observable)
     end
   end
 end
